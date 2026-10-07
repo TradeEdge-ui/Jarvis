@@ -2,7 +2,9 @@
 
 Legend: ✅ built **and tested here** · 🟡 built, verification limited (reason given) · ⬜ not built
 
-Test suite: **235 passing, 1 skipped on Linux** (the skip is the Windows-only PowerShell test). Windows results: see "Windows" below.
+Test suite, from CI run 1 on commit `b041163` (GitHub Actions, all three jobs green):
+**Ubuntu 3.11 and 3.13 — 235 passed, 14 skipped** (all skips are Windows-only tests) ·
+**Windows (windows-latest, 3.13) — 220 passed, 29 skipped** (all skips are POSIX-only stand-in tests; see "Windows" below).
 
 ## Spec section by section
 
@@ -11,7 +13,7 @@ Test suite: **235 passing, 1 skipped on Linux** (the skip is the Windows-only Po
 | 1,36,37 | One identity, cross-device continuity | ✅ | Shared server-side conversation/tasks/memory/approvals. Tested over HTTP with two device tokens (PC creates reminder → phone sees it; approval raised on one device decided on another). Only *web/CLI* clients exist. |
 | 5,29 | Executive loop, verify, self-correction | ✅ | Plan → permission → execute → verify → report; bounded retries, skip-after-failure, duplicate-call cap, honest `unverified`. Self-correction is *model-driven* (the model sees errors and may try ≤2 alternatives); apps try multiple launch candidates. |
 | 6,12 | Tool system | ✅ | 31 tools; each has input schema, scope, risk classification, run, verify, audit. Output schema is the `ToolResult` envelope (+ free-form `data`). |
-| 6 | Windows PC control | 🟡 | App launch/close, files, PowerShell, system info. **Written for Windows, verified on Linux with stand-in processes; real `notepad.exe`/PowerShell tests run in CI (see Windows).** Not built: window switching, clipboard, form filling, downloads/uploads. |
+| 6 | Windows PC control | ✅/🟡 | App launch/close, files, PowerShell, system info. **Verified on a real Windows runner in CI**: real `notepad.exe` launch → process-table verification → approved close, the "open Notepad and create a file saying hello" scenario, real PowerShell (read-only runs freely, mutation waits for approval), UNC/drive-root/backslash-traversal/credential paths denied, case-insensitive paths. 🟡 The runner is a GitHub-hosted Windows Server image, not a Windows 11 desktop (Store-version Notepad hand-off, UAC, antivirus and your own installed apps are unexercised). Not built: window switching, clipboard, form filling, downloads/uploads. |
 | 7 | Computer vision / screen awareness | ⬜ | No screen capture, no UI-element detection, no mouse/keyboard control. |
 | 8 | Android app | ⬜ | Not built. The API it needs exists. |
 | 9,10 | Voice, wake word | 🟡/⬜ | Browser-native speech recognition/synthesis buttons in the web UI (Chromium/Edge/Safari) — **not testable headless; untested**. Local STT/TTS providers, wake word, interruption handling: not built. |
@@ -39,9 +41,17 @@ Test suite: **235 passing, 1 skipped on Linux** (the skip is the Windows-only Po
 
 ## Windows
 
-Verified on Linux only so far. `tests/test_windows.py` drives real `notepad.exe`, real PowerShell, and Windows path semantics (UNC paths,
-drive roots, case-insensitivity, backslash traversal); `.github/workflows/ci.yml` runs it on `windows-latest`.
-**CI result: pending — see the bottom of this file once the first run completes.**
+CI (`.github/workflows/ci.yml`, run 1, `windows-latest`, Python 3.13): **220 passed, 29 skipped, 0 failed.**
+
+Ran and passed on Windows: all of `tests/test_windows.py` (real `notepad.exe` open/verify/approved-close; the headline
+"open Notepad and create a file saying hello" scenario; real PowerShell; Windows path-sandbox cases; built-in app resolution),
+plus the shared suite — policy, audit, memory, tasks, finance, API, CLI, model/agent loop with injection tests, and the Chromium-based
+`browser_read` tests (Playwright's Chromium installed on the runner).
+
+Not covered on Windows, and why:
+* 29 skips are tests that need the POSIX "sleeper" stand-in executable or POSIX shell/symlinks. Their real-Windows equivalents are in `test_windows.py`.
+* **The dashboard browser test (`test_ui_browser.py`) is skipped on Windows** only because it reuses that stand-in to produce an approval card. It passes on Ubuntu. (Easy fix: produce the approval with an app registered under a unique non-running process name, which works on every OS.)
+* Not exercised anywhere: a real Windows 11 desktop session, Store-version Notepad, UAC prompts, antivirus interference, long-running operation.
 
 ## Defects found by testing while building (and fixed)
 
