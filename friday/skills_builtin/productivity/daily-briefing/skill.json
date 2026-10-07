@@ -1,0 +1,5 @@
+{"name": "daily-briefing", "purpose": "Concise morning and end-of-day executive briefings.",
+ "tools": ["briefing", "task_list"], "permissions": ["tasks.read"],
+ "triggers": ["briefing", "good morning", "what's important", "what should i do", "priorities", "end of day", "accomplish"],
+ "inputs": [], "outputs": ["a short briefing with a recommended next action"],
+ "validation": "Only report what the tools returned; list what is not connected."}

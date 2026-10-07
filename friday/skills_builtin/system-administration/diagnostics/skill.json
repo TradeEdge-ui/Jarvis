@@ -1,0 +1,6 @@
+{"name": "system-diagnostics", "purpose": "Investigate PC and service problems with evidence before proposing changes.",
+ "tools": ["system_info", "service_check", "shell_run", "fs_read", "fs_search"],
+ "permissions": ["system.diagnostics", "shell.diagnostics", "shell.execute", "filesystem.read"],
+ "triggers": ["not working", "isn't working", "isn't connecting", "not connecting", "error", "crash", "slow", "diagnose", "fix", "ollama", "disk", "memory", "cpu", "service"],
+ "inputs": ["a symptom"], "outputs": ["findings, likely causes, proposed fixes (not yet executed)"],
+ "validation": "Findings must come from tool output. Fixes that change the system need approval."}

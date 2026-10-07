@@ -1,0 +1,5 @@
+{"name": "finance-education", "purpose": "Explain financial concepts and summarise supplied market information responsibly.",
+ "tools": ["memory_search", "browser_read", "finance_calc"], "permissions": ["finance.research", "browser.read", "finance.analysis"],
+ "triggers": ["forex", "stock", "stocks", "etf", "bond", "futures", "commodity", "gold", "xauusd", "inflation", "interest rate", "fed", "central bank", "macro", "economic", "market", "invest", "portfolio", "risk management", "nfp", "cpi"],
+ "inputs": ["a finance question or supplied data"], "outputs": ["an explanation that separates fact, estimate, assumption and opinion"],
+ "validation": "No guaranteed returns; every numeric claim comes from supplied data or a cited source."}

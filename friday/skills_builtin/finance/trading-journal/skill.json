@@ -1,0 +1,5 @@
+{"name": "trading-journal", "purpose": "Analyse a trading journal and separate observation from interpretation from recommendation.",
+ "tools": ["finance_journal_analyze", "fs_search", "finance_calc"], "permissions": ["finance.analysis", "filesystem.read"],
+ "triggers": ["journal", "trades", "trade", "win rate", "expectancy", "drawdown", "profit factor", "xauusd"],
+ "inputs": ["path to a CSV/XLSX journal"], "outputs": ["statistics, patterns with sample sizes, recommendations"],
+ "validation": "Report sample sizes; flag n < 30 as low confidence; never extrapolate to future results."}

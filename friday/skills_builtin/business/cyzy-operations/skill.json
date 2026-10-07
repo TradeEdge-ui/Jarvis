@@ -1,0 +1,6 @@
+{"name": "cyzy-operations", "purpose": "Run CyZy operations reporting and task tracking across its divisions.",
+ "tools": ["report_generate", "briefing", "task_list", "task_add", "memory_search", "memory_remember"],
+ "permissions": ["documents.write", "tasks.read", "tasks.write", "memory.read", "memory.write"],
+ "triggers": ["cyzy", "operations report", "weekly report", "proposal", "invoice", "quotation", "lead", "customer", "business"],
+ "inputs": ["project name"], "outputs": ["a saved report and a short spoken summary"],
+ "validation": "A report is only 'done' when the file exists and contains its sections; say which data sources are not connected."}
