@@ -219,3 +219,31 @@ def test_agent_sends_a_narrowed_tool_list_not_all_of_them(svc, llm_agent):
     sent = fake.requests[0]["tools"]
     assert len(sent) < len(svc.registry.all())
     assert "fs_write" in {t["function"]["name"] for t in sent}
+
+
+# ---------------------------------------------------------------- leaked <untrusted_content> tag
+def test_strip_leaked_tags_removes_the_marker_but_keeps_the_text():
+    from friday.core.agent import strip_leaked_tags
+    assert strip_leaked_tags("<untrusted_content>\nHello there.\n</untrusted_content>") == "Hello there."
+    assert strip_leaked_tags("No tag here.") == "No tag here."
+    assert strip_leaked_tags("Before <UNTRUSTED_CONTENT> middle </untrusted_content> after") == "Before middle after"
+    assert strip_leaked_tags("") == ""
+    assert strip_leaked_tags(None) is None
+
+
+def test_a_model_echoing_the_leaked_tag_is_sanitised_before_it_reaches_the_user(svc, llm_agent):
+    """Real finding: qwen3:8b wrapped its own reply in the literal <untrusted_content> tag after reading the
+    persona rule that merely describes it. The reply the user sees, and what's stored in history, must be clean."""
+    fake = FakeOllama(script=[call("memory_search", query="audit"),
+                              say("<untrusted_content>\nNo results found for that search.\n</untrusted_content>")])
+    r = llm_agent(fake).handle("friday audit -n 10", device="pc")
+    assert "untrusted_content" not in r.reply.lower()
+    assert "No results found" in r.reply
+    stored = svc.conversations.history(r.conversation_id)[-1]
+    assert "untrusted_content" not in stored["content"].lower()
+
+
+def test_persona_never_prints_the_literal_tag_as_something_to_imitate():
+    from friday.core.persona import PERSONA
+    assert "never write it yourself" in PERSONA
+    assert "never wrap your own reply in it" in PERSONA

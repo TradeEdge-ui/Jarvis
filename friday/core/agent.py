@@ -20,6 +20,16 @@ from friday.util import redact
 TOOL_MSG_LIMIT = 8000
 HISTORY_LIMIT = 20
 
+# The <untrusted_content> marker belongs only inside tool results (see tool_message_content below). A model was
+# observed (real Ollama testing, qwen3:8b) echoing it into its OWN reply after reading the persona rule that merely
+# describes the marker. Wording the rule more carefully helps, but this strips it defensively either way so a
+# prompt-level slip can never reach the user as a confusing raw tag.
+_LEAKED_TAG = re.compile(r"\s*</?untrusted_content>\s*", re.I)
+
+
+def strip_leaked_tags(text: str) -> str:
+    return _LEAKED_TAG.sub(" ", text).strip() if text else text
+
 _ESTOP = re.compile(r"^(?:emergency\s*stop|e-?stop|stop everything|halt everything|abort everything|kill switch|stop all (?:actions|tasks|automation|tools))\b", re.I)
 _RESUME = re.compile(r"\b(resume|release|disable|lift|clear|reset|turn off)\b.*\b(emergency|e-?stop)\b|\b(emergency|e-?stop)\b.*\b(resume|release|disable|lift|clear|reset|off)\b", re.I)
 _YES = re.compile(r"^(?:yes|yep|yeah|approve|approved|go ahead|do it|confirm|confirmed|proceed|ok|okay|sure|yes please)\W*$", re.I)
@@ -108,6 +118,7 @@ class Agent:
         try:
             for _step in range(svc.config.max_steps):
                 resp = provider.chat(messages, tool_schemas, system)
+                resp.text = strip_leaked_tags(resp.text)
                 if not resp.tool_calls:
                     final = resp.text
                     break
