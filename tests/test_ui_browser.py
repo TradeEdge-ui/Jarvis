@@ -51,6 +51,15 @@ def test_dashboard_end_to_end(svc, chromium, live):
         assert "Finish the CyZy proposal" in pg.inner_text("#tasks")
         assert "verified" in pg.inner_text("#log .msg.assistant:last-child .chips")
 
+        convs_before = len(svc.conversations.list())
+        pg.click("#newChat"); pg.wait_for_timeout(300)
+        assert "fresh conversation" in pg.inner_text("#log").lower()
+        assert "Finish the CyZy proposal" not in pg.inner_text("#log")    # old log cleared client-side
+        assert len(svc.conversations.list()) == convs_before + 1
+        say("what should I do next?")
+        assert "Finish the CyZy proposal" in pg.inner_text("#log")        # the task itself is shared state, not lost
+        assert len(svc.conversations.list()) == convs_before + 1          # continuing the new thread adds no 3rd one
+
         say("close sleeper")                                           # needs approval -> card appears
         pg.wait_for_selector("#approvals .item")
         pg.click("#approvals .btn.ok")

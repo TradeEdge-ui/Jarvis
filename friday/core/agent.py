@@ -99,7 +99,7 @@ class Agent:
         messages.append({"role": "user", "content": text})
 
         system = self._system_prompt(text, device)
-        tool_schemas = svc.registry.schemas()
+        tool_schemas = svc.registry.schemas(svc.registry.relevant(text))
         actions: list[dict] = []
         pending: list[dict] = []
         seen: dict[str, int] = {}

@@ -210,3 +210,12 @@ def test_taint_forces_approval_for_ordinary_writes_after_untrusted_content(svc, 
                               call("app_open", app="standin"), say("ok")])
     r = llm_agent(fake).handle("research example.com and open my editor afterwards", device="pc")
     assert {a["tool"]: a["status"] for a in r.actions}["app_open"] == "approval_required"
+
+
+def test_agent_sends_a_narrowed_tool_list_not_all_of_them(svc, llm_agent):
+    """Real Ollama testing showed small models do worse with the full 31-tool list every request."""
+    fake = FakeOllama(script=[call("fs_write", path="Documents/a.txt", content="hi"), say("done")])
+    llm_agent(fake).handle("create a file called a.txt saying hi", device="pc")
+    sent = fake.requests[0]["tools"]
+    assert len(sent) < len(svc.registry.all())
+    assert "fs_write" in {t["function"]["name"] for t in sent}

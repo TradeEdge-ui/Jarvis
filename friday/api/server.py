@@ -33,6 +33,10 @@ class ChatIn(BaseModel):
     conversation_id: str | None = None
 
 
+class NewConversationIn(BaseModel):
+    title: str = ""
+
+
 class TaskIn(BaseModel):
     title: str
     description: str = ""
@@ -170,6 +174,12 @@ def create_app(svc: Services | None = None, router: ModelRouter | None = None, s
     @app.get("/v1/conversations")
     def conversations(p: Principal = Depends(current)):
         return svc.conversations.list()
+
+    @app.post("/v1/conversations", status_code=201)
+    def new_conversation(body: NewConversationIn | None = None, p: Principal = Depends(current)):
+        """Start a fresh conversation instead of continuing the shared 'main' thread."""
+        cid = svc.conversations.new(title=(body.title if body else ""), device=p.name)
+        return {"conversation_id": cid}
 
     @app.get("/v1/conversations/{cid}/messages")
     def messages(cid: str, limit: int = Query(50, ge=1, le=200), p: Principal = Depends(current)):

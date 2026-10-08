@@ -91,6 +91,9 @@ def cmd_chat(args) -> int:
     agent = Agent(svc, ModelRouter(svc))
     b = agent.router.backend()
     print(f"{BANNER}  ·  brain: {b['provider']}:{b['model']}" + (f"  [degraded: {b['reason']}]" if b["degraded"] else ""))
+    cid = svc.conversations.new(device="cli") if getattr(args, "new", False) else None
+    if cid:
+        print(f"Starting a fresh conversation ({cid}); the shared 'main' history is untouched.")
     print("Type a message. Ctrl-C or 'exit' to quit.\n")
     from friday.scheduler import Scheduler
     Scheduler(svc).tick()
@@ -105,14 +108,15 @@ def cmd_chat(args) -> int:
         if line.lower() in ("exit", "quit"):
             return 0
         if line:
-            _print_result(agent.handle(line, device="cli"))
+            _print_result(agent.handle(line, device="cli", conversation_id=cid))
             print()
 
 
 def cmd_ask(args) -> int:
     svc = _services(args)
     _first_run(svc, quiet=True)
-    r = Agent(svc, ModelRouter(svc)).handle(" ".join(args.text), device="cli")
+    cid = svc.conversations.new(device="cli") if getattr(args, "new", False) else None
+    r = Agent(svc, ModelRouter(svc)).handle(" ".join(args.text), device="cli", conversation_id=cid)
     _print_result(r)
     return 0 if r.status in ("info", "completed") else 2
 
@@ -233,12 +237,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--version", action="version", version=f"friday {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name, fn, help_ in [("init", cmd_init, "create the workspace and owner token"), ("doctor", cmd_doctor, "check the installation"),
-                            ("chat", cmd_chat, "interactive chat"),
                             ("estop", cmd_estop, "engage the emergency stop"), ("resume", cmd_resume, "release the emergency stop"),
                             ("devices", cmd_devices, "list registered devices")]:
         sub.add_parser(name, help=help_).set_defaults(fn=fn)
+    p = sub.add_parser("chat", help="interactive chat")
+    p.add_argument("--new", action="store_true", help="start a fresh conversation instead of continuing 'main'")
+    p.set_defaults(fn=cmd_chat)
     p = sub.add_parser("approvals", help="list pending approvals"); p.add_argument("--all", action="store_true"); p.set_defaults(fn=cmd_approvals)
-    p = sub.add_parser("ask", help="send one message"); p.add_argument("text", nargs="+"); p.set_defaults(fn=cmd_ask)
+    p = sub.add_parser("ask", help="send one message"); p.add_argument("text", nargs="+")
+    p.add_argument("--new", action="store_true", help="start a fresh conversation instead of continuing 'main'")
+    p.set_defaults(fn=cmd_ask)
     p = sub.add_parser("serve", help="run the API + web UI"); p.add_argument("--host"); p.add_argument("--port", type=int); p.set_defaults(fn=cmd_serve)
     p = sub.add_parser("approve", help="approve a pending action"); p.add_argument("id", type=int)
     p.add_argument("--always", action="store_true", help="remember this exact action as pre-approved"); p.set_defaults(fn=cmd_approve)

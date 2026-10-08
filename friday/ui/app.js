@@ -87,6 +87,14 @@
     busy = false; $("send").disabled = false; $("msg").focus();
   }
   $("chatForm").addEventListener("submit", (e) => { e.preventDefault(); const t = $("msg").value; $("msg").value = ""; send(t); });
+  $("newChat").addEventListener("click", async () => {
+    try {
+      const r = await api("/v1/conversations", { method: "POST", body: {} });
+      conv = r.conversation_id;
+      clear($("log"));
+      addMsg("assistant", "Started a fresh conversation. The previous one is kept, not deleted.");
+    } catch (e) { addMsg("assistant", "Could not start a new conversation: " + e.message); }
+  });
 
   // voice: browser-native speech recognition (Chromium/Edge/Safari). Audio goes to the browser vendor's service, not to FRIDAY.
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

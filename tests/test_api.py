@@ -172,3 +172,18 @@ def test_scheduler_thread_starts_and_stops_with_the_app(svc):
     with TestClient(app):
         assert app.state.scheduler._thread.is_alive()
     assert app.state.scheduler._stop.is_set()
+
+
+def test_new_conversation_endpoint_isolates_history(api):
+    api.post("/v1/chat", json={"message": "remind me tomorrow to call Ben"}, headers=api.owner)   # -> main
+    r = api.post("/v1/conversations", json={}, headers=api.owner)
+    assert r.status_code == 201
+    cid = r.json()["conversation_id"]
+    assert cid and cid != "main"
+    api.post("/v1/chat", json={"message": "what should I do next?", "conversation_id": cid}, headers=api.owner)
+    main_msgs = [m["content"] for m in api.get("/v1/conversations/main/messages", headers=api.owner).json()]
+    fresh_msgs = [m["content"] for m in api.get(f"/v1/conversations/{cid}/messages", headers=api.owner).json()]
+    assert any("call Ben" in m for m in main_msgs)
+    assert not any("what should I do next" in m for m in main_msgs)
+    assert any("what should I do next" in m for m in fresh_msgs)
+    assert {c["id"] for c in api.get("/v1/conversations", headers=api.owner).json()} == {"main", cid}

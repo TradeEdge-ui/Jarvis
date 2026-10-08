@@ -28,7 +28,7 @@ Test suite, from CI run 1 on commit `b041163` (GitHub Actions, all three jobs gr
 | 22 | Research engine | 🟡 | `browser_read` (one page, headless, SSRF-guarded, untrusted-fenced). ⬜ search, multi-source comparison, citation tracking, saved research. |
 | 23 | File intelligence | 🟡 | txt/md/csv/json/code, CSV/XLSX summary + calculations. ⬜ PDF, DOCX, PPTX, images, comparison, classification, organisation. |
 | 24 | IT assistant | 🟡 | System info, read-only diagnostics, `service_check` (Ollama scenario), approval-gated shell. ⬜ log analysis helpers, service management. |
-| 25 | Local AI + routing | 🟡 | Ollama + OpenAI-compatible providers, per-task routes, graceful fallback. **Tested against a fake server speaking the wire format — never against a real model** (no network in the build sandbox). Local-model tool-calling quality is unknown until you run it. ⬜ vision/speech routes. |
+| 25 | Local AI + routing | 🟡 | Ollama + OpenAI-compatible providers, per-task routes, graceful fallback. **Now tested live** against real Ollama (`qwen2.5:7b-instruct`, `qwen3:8b`) on the user's Windows PC — see "Real-model findings" below; that session also found and fixed a real tool-selection reliability problem. ⬜ vision/speech routes. |
 | 26 | Security | ✅/🟡 | See `ARCHITECTURE.md`. ⬜ encryption at rest, OS keychain, brute-force lockout. TLS verified manually (self-signed cert, `curl`), not in the automated suite. |
 | 28 | Audit log | ✅ | All fields required by the spec; hash-chained; tamper-evident (tested). |
 | 30 | Task management | ✅ | All listed fields + commands. |
@@ -53,6 +53,38 @@ Not covered on Windows, and why:
 * **The dashboard browser test (`test_ui_browser.py`) is skipped on Windows** only because it reuses that stand-in to produce an approval card. It passes on Ubuntu. (Easy fix: produce the approval with an app registered under a unique non-running process name, which works on every OS.)
 * Not exercised anywhere: a real Windows 11 desktop session, Store-version Notepad, UAC prompts, antivirus interference, long-running operation.
 
+## Real-model findings (first live test, user's Windows PC, 8 Oct 2026)
+
+First time FRIDAY ran against an actual language model rather than the offline rules planner or a fake test server.
+`friday doctor` reported a healthy install (Ollama reachable, model installed, active brain correctly selected) — but
+real usage surfaced a reliability problem the fake-server tests couldn't catch, because they script the model's
+response rather than letting a real model choose:
+
+| Attempt | Model | What happened |
+|---|---|---|
+| "open notepad and create a file saying hello" | `qwen2.5:7b-instruct` | Never touched notepad/files. Called `browser_read` against `http://example.com` seven times in a row (the canonical placeholder URL from countless tool-calling tutorials) until hitting the request's 8-step limit. |
+| "list files in Documents" | `qwen2.5:7b-instruct` | Called `knowledge_ingest` and `memory_forget` with fabricated arguments (a filename and a memory id that never appeared in the message), again hitting the step limit. |
+| "list files in Documents" (fresh model) | `qwen3:8b` | First attempt timed out loading the model (cold start > 120s, not a correctness bug). Retried once loaded: replied in plain text that none of its tools could list a directory — **despite `fs_list` being registered** — rather than calling it. |
+
+**Nothing destructive happened in any of these** — the policy engine, duplicate-call cap and step limit worked exactly
+as designed; every failure was caught and reported honestly ("I stopped after reaching the step limit…") rather than
+claimed as success. The failure was entirely in *tool selection*: three different attempts, three different ways of
+losing track of the real tool list.
+
+**Root cause identified**: FRIDAY sent all 31 tool schemas on every single request. That's a well-known way to degrade
+a 7–8B model's tool selection. **Fix implemented** (`friday/tools/registry.py`, `ToolRegistry.relevant()`): a small
+always-available core (briefing, task list/add/update/complete, memory search/remember, file list/read/write/search,
+app open, system info) plus keyword-matched extras, capped at 20 of 31 — covered by `tests/test_tool_relevance.py`
+and mutation-checked (disabling either the narrowing or the always-available set fails the tests). A second real gap
+found during the same session — no way to start a fresh conversation, so a failed attempt's noisy tool-call history
+polluted the next unrelated request — was also fixed: `friday chat --new` / `friday ask --new`, `POST /v1/conversations`,
+and a "New" button in the web UI, covered by API/CLI/browser tests.
+
+**Honesty check**: the narrowing fix is verified here against the full test suite (245 passing) and a fake-Ollama
+transport that confirms the outgoing request now carries fewer tool schemas — but it has **not yet been re-run
+against the real Ollama instance that produced these failures**. Whether it actually fixes the behavior on real
+hardware is the next thing to find out, not yet a confirmed result.
+
 ## Defects found by testing while building (and fixed)
 
 | What failed | Why | Found by | Fix |
@@ -64,16 +96,23 @@ Not covered on Windows, and why:
 | "read https://example.com" was routed to the file reader | `.com` looks like a file extension | parametrized planner test | URL rule evaluated before the file rule |
 | Inline `style=` blocked by own CSP | UI used one inline style | live UI run | CSS class |
 | Mandatory-risk rule had no effective test | default `confirm` grants masked it | mutation check | tests for loosened grants and approved workflows |
+| Real model picked wrong/nonexistent tools repeatedly (hallucinated args, hallucinated "I don't have that tool") | all 31 tool schemas sent on every request, regardless of relevance | live testing with real Ollama on user's Windows PC | `ToolRegistry.relevant()`: always-available core + keyword-matched extras, capped well below 31 |
+| No way to test with a clean conversation; failed attempts polluted later unrelated requests | CLI/API always resolved to the single shared "main" conversation | same live session | `--new` CLI flag, `POST /v1/conversations`, "New" button in the UI |
+| A throwaway mutation-test shortcut (`git checkout` on an uncommitted file) silently discarded a real, uncommitted fix | `git checkout -- <file>` reverts to the last *commit*, not "before this edit", when the edit was never committed | re-running the full suite immediately after, as always | reapplied the lost line; the lesson: never use `git checkout` to undo a scratch mutation on a file with uncommitted changes — diff and hand-revert instead |
 
 ## Not yet exercised anywhere
 
-A real Ollama model; a real microphone; any phone; a real Windows desktop session beyond CI's runner; long-running operation
-(memory growth, scheduler over days); concurrency under load.
+The tool-narrowing and conversation-reset fixes above, against the real Ollama instance that motivated them; a real
+microphone; any phone; a real Windows desktop session beyond CI's runner; long-running operation (memory growth,
+scheduler over days); concurrency under load.
 
 ## Recommended next steps (in order)
 
-1. Run it with a real tool-calling model (`friday doctor`, then try the example commands) and note where the planner/model behaves badly — the agent loop and prompts are the part most likely to need tuning.
-2. Windows hardening from your own machine's feedback (apps you actually use → `Core/config.json`).
+1. **Re-run the exact failing scenarios** ("open notepad and create a file saying hello", "list files in Documents")
+   against real Ollama with the tool-narrowing fix in place, on both `qwen2.5:7b-instruct` and `qwen3:8b`. Confirm
+   whether it actually fixes tool selection, or whether a further change (fewer tools still, different schema
+   shape, a different model) is needed.
+2. Windows hardening from the user's own machine's feedback (apps actually used → `Core/config.json`).
 3. Phase 3: local STT/TTS providers (e.g. faster-whisper + Piper/SAPI) behind the same `/v1/chat`; wake word after push-to-talk is solid.
 4. Phase 4: Android client (Compose) — registration, chat, approvals, notifications.
 5. Phase 5: first business connector (Telegram front door → lead capture → task), then semantic search and document generation (DOCX/XLSX).

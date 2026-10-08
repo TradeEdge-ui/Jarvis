@@ -1,3 +1,4 @@
+import io
 import json
 import sys
 
@@ -74,3 +75,30 @@ def test_approve_and_deny_from_the_cli(capsys, tmp_path, monkeypatch):
     assert (home / "out.txt").read_text().strip() == "cli-approved"
     code, out = run_cli(capsys, home, "deny", str(b)); assert "Denied" in out and not (home / "no.txt").exists()
     code, out = run_cli(capsys, home, "approve", str(b)); assert code == 1 and "Cannot approve" in out
+
+
+def test_ask_new_starts_a_separate_conversation_from_main(capsys, tmp_path, monkeypatch):
+    monkeypatch.setenv("FRIDAY_MODEL_PROVIDER", "rules")
+    home = tmp_path / "F"
+    run_cli(capsys, home, "ask", "what", "should", "i", "do", "next?")                          # -> main
+    run_cli(capsys, home, "ask", "--new", "what", "do", "you", "remember", "about", "unicorns")  # -> fresh thread
+    from friday.config import Config
+    from friday.services import build_services
+    svc = build_services(Config.from_env(home=home))
+    try:
+        convs = svc.conversations.list()
+        assert len(convs) == 2
+        main_msgs = [m["content"] for m in svc.conversations.history("main")]
+        assert not any("unicorns" in c for c in main_msgs)
+        fresh_id = next(c["id"] for c in convs if c["id"] != "main")
+        fresh_msgs = [m["content"] for m in svc.conversations.history(fresh_id)]
+        assert any("unicorns" in c for c in fresh_msgs)
+    finally:
+        svc.close()
+
+
+def test_chat_new_flag_is_wired(capsys, tmp_path, monkeypatch):
+    monkeypatch.setenv("FRIDAY_MODEL_PROVIDER", "rules")
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))   # EOF immediately -> cmd_chat's input() loop exits cleanly
+    code, out = run_cli(capsys, tmp_path / "F", "chat", "--new")
+    assert code == 0 and "Starting a fresh conversation" in out
